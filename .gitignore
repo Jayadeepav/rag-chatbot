@@ -1,0 +1,12 @@
+# Virtual environment
+venv/
+
+# Model files
+*.gguf
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Streamlit cache
+.streamlit/
