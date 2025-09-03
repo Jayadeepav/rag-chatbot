@@ -8,6 +8,6 @@ This is a Retrieval-Augmented Generation (RAG) chatbot built with:
 - PyPDF2 for PDF document processing
 
 
-Created with ❤️ by Jayadeepa V
-✉️deepa1283023@gmail.com
+Created with ❤️ by Jayadeepa V\
+✉️deepa1283023@gmail.com\
 Happy Coding!✌️
