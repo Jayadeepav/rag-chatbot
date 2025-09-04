@@ -1,12 +1,28 @@
-# Virtual environment
-venv/
-
-# Model files
-*.gguf
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.log
 
-# Streamlit cache
-.streamlit/
+# Virtual environment
+.env
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# FAISS index and pickles
+storage/
+*.pkl
+faiss_index/
+
+# Other
+*.pdf
+*.txt
