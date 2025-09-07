@@ -31,6 +31,23 @@ Query the documents using a local Phi-2 model (no API needed)
 CPU-friendly setup (runs locally without GPU)
 
 
+Generation Pipeline and Retrival
+
+Ask questions and get accurate answers from uploaded documents
+
+Perform document retrieval using embeddings stored in ChromaDB / FAISS
+
+Generate embeddings with Hugging Face models (no API keys required)
+
+Use a local Phi-2 language model for answering queries without internet
+
+Retrieve relevant document chunks to build contextual answers
+
+CPU-friendly setup – runs entirely on local hardware without GPU
+
+Interactive Streamlit interface for easy querying and exploration
+
+
 Created with ❤️ by Jayadeepa V\
 ✉️deepa1283023@gmail.com\
 Happy Coding!✌️
