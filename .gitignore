@@ -1,28 +1,30 @@
-# Python
+# Virtual environment
+env/
+venv/
+.env
+
+# Generated data
+storage/
+*.pkl
+*.faiss
+
+# Model files (except configs)
+models/phi-2-GGUF/*.gguf
+!models/phi-2-GGUF/README.md
+
+# IDE
+.vscode/
+.idea/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.log
 
-# Virtual environment
-.env
-venv/
-env/
-
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# VSCode / IDE
-.vscode/
-.idea/
+# Documents
+data/*.pdf
+data/*.txt
 
-# FAISS index and pickles
-storage/
-*.pkl
-faiss_index/
-
-# Other
-*.pdf
-*.txt
+# Streamlit
+.streamlit/
