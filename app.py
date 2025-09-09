@@ -1,136 +1,158 @@
 import streamlit as st
 import os
 from pathlib import Path
+from datetime import datetime
 from src.document_processor import process_document, chunk_text
 from src.vector_store import get_vector_store, add_to_vector_store
 from src.rag_pipeline import query_documents
 
-# Streamlit app setup
+# Page config
 st.set_page_config(page_title="RAG Chatbot", layout="wide")
-st.title("📚 RAG Chatbot")
-
-# Check if models are available
-def check_models():
-    """Check if required models are available"""
-    embedding_model_path = "models/all-MiniLM-L6-v2"
-    
-    warnings = []
-    if not os.path.exists(embedding_model_path):
-        warnings.append("Embedding model not found. Please run download_model.py")
-    
-    return warnings
-
-# Initialize
-model_warnings = check_models()
-for warning in model_warnings:
-    st.warning(warning)
 
 # Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = get_vector_store()
 
-# Sidebar for document upload
+# Helper: format timestamp
+def format_timestamp():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# Sidebar: Document upload and management
 with st.sidebar:
     st.header("📁 Document Management")
+
+    # Model check and download info
+    embedding_model_path = "models/all-MiniLM-L6-v2"
+    if not os.path.exists(embedding_model_path):
+        st.warning("Embedding model not found. Please run download_model.py")
+
     uploaded_file = st.file_uploader("Upload PDF or TXT", type=["pdf", "txt"])
-    
     if uploaded_file:
-        # Save uploaded file
         data_dir = Path("data")
         data_dir.mkdir(exist_ok=True)
         file_path = data_dir / uploaded_file.name
-        
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        # Process document
-        with st.spinner("Processing document..."):
-            try:
-                text = process_document(file_path)
-                chunks = chunk_text(text)
-                
-                if st.button("Add to Knowledge Base"):
+
+        if not file_path.exists():
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+        st.success(f"Uploaded: {uploaded_file.name}")
+
+        if st.button("Process and Add to Knowledge Base"):
+            with st.spinner("Processing document and adding to knowledge base..."):
+                try:
+                    text = process_document(file_path)
+                    chunks = chunk_text(text)
+
+                    # Add to vector store
                     add_to_vector_store(chunks, uploaded_file.name)
+
+                    # Get vector store instance and show document count
+                    vs = get_vector_store()
+                    doc_count = vs.get_count()
                     st.success(f"Added {len(chunks)} chunks to knowledge base!")
-                    
-            except Exception as e:
-                st.error(f"Error processing document: {str(e)}")
-    # In the sidebar section of app.py, add:
-if st.sidebar.button("🛠️ Debug - Check Documents"):
-    vs = st.session_state.vector_store
-    count = vs.get_count()
-    st.sidebar.info(f"Documents in database: {count}")
-    
-    if count > 0:
-        st.sidebar.write("Sample document content:")
-        for i, doc in enumerate(vs.documents[:2]):  # Show first 2 docs
-            st.sidebar.text_area(f"Document {i+1}", doc[:200] + "..." if len(doc) > 200 else doc, height=100)
-    else:
-        st.sidebar.warning("No documents found in database!")
+                    st.info(f"Total documents in vector store: {doc_count}")
 
-# Main chat interface
-st.header("💬 Chat with Your Documents")
+                except Exception as e:
+                    st.error(f"Error processing document: {str(e)}")
 
-query = st.text_input("Ask a question about your documents:", key="query_input")
-top_k = st.slider("Number of context chunks:", 1, 5, 3)
+    st.markdown("---")
+    st.header("🗄️ Database Management")
+    if st.button("Show Database Info"):
+        vs = st.session_state.vector_store
+        count = vs.get_count()
+        st.info(f"Documents in database: {count}")
 
-if query and st.button("Get Answer"):
+    if st.button("Clear Database"):
+        if st.checkbox("Confirm deletion"):
+            vs = st.session_state.vector_store
+            vs.clear()
+            st.success("Database cleared!")
+
+    st.markdown("---")
+    st.markdown("### 📖 How to use:")
+    st.markdown("""
+    1. Upload a document (PDF or TXT)  
+    2. Click 'Process and Add to Knowledge Base'  
+    3. Ask questions about your documents below  
+    4. View confidence scores and retrieved context  
+    """)
+
+# Main app layout
+st.title("📚 RAG Chatbot")
+
+# Chat input and controls in columns
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    query = st.text_input("Ask a question about your documents:", key="query_input")
+with col2:
+    top_k = st.slider("Context chunks:", 1, 5, 3)
+    get_answer = st.button("Get Answer")
+
+# Clear chat button
+if st.button("Clear Chat History"):
+    st.session_state.chat_history = []
+    st.success("Chat history cleared!")
+
+# Process query
+if get_answer and query.strip():
     with st.spinner("Searching and generating answer..."):
         try:
             results = query_documents(query, top_k=top_k)
-            
+
+            # Save chat history with timestamp
+            st.session_state.chat_history.append({
+                "user": query,
+                "bot": results["answer"],
+                "timestamp": format_timestamp()
+            })
+
+            # Display answer and confidence
             st.subheader("Answer:")
-            st.write(results["answer"])
-            
-            # Confidence display
-            if "confidence" in results:
+            st.markdown(f"**{results['answer']}**")
+
+            if results.get("confidence") is not None:
                 confidence_percent = results["confidence"] * 100
                 st.metric("Confidence Score", f"{confidence_percent:.1f}%")
-                
-                # Show similarity scores for each context
-                with st.expander("View Similarity Scores"):
-                    similarities = results.get("similarities", [])
-                    # Ensure similarities is a list, not a single value
-                    if not isinstance(similarities, list):
-                        similarities = [similarities] if similarities is not None else []
-                    
-                    for i, context in enumerate(results["contexts"]):
-                        if i < len(similarities):
-                            similarity = similarities[i]
-                            sim_percent = similarity * 100
-                            st.write(f"**Context {i+1}**: {sim_percent:.1f}% similar")
-                            st.progress(float(similarity))  # Ensure it's a float
-                        else:
-                            st.write(f"**Context {i+1}**: Similarity score not available")
-            
+
+            # Similarity scores
+            with st.expander("View Similarity Scores"):
+                similarities = results.get("similarities", [])
+                if not isinstance(similarities, list):
+                    similarities = [similarities] if similarities is not None else []
+
+                for i, sim in enumerate(similarities):
+                    sim_percent = sim * 100
+                    st.write(f"Context {i+1}: {sim_percent:.1f}% similar")
+                    st.progress(float(sim))
+
+            # Retrieved context with optional highlighting
             with st.expander("View Retrieved Context"):
-                for i, context in enumerate(results["contexts"]):
+                for i, context in enumerate(results.get("contexts", [])):
                     st.markdown(f"**Context {i+1}:**")
-                    st.write(context[:500] + "..." if len(context) > 500 else context)
+                    # Show first 500 chars with ellipsis if long
+                    display_text = context if len(context) <= 500 else context[:500] + "..."
+                    st.write(display_text)
                     st.divider()
-                    
+
         except Exception as e:
             st.error(f"Error: {str(e)}")
             st.info("Make sure you have documents in the knowledge base and models are downloaded.")
 
-# Database info
-if st.sidebar.button("Show Database Info"):
-    vs = st.session_state.vector_store
-    count = vs.get_count()
-    st.sidebar.info(f"Documents in database: {count}")
+elif get_answer and not query.strip():
+    st.warning("Please enter a question before clicking 'Get Answer'.")
 
-if st.sidebar.button("Clear Database"):
-    if st.sidebar.checkbox("Confirm deletion"):
-        vs = st.session_state.vector_store
-        vs.clear()
-        st.sidebar.success("Database cleared!")
+# Display chat history nicely with timestamps
+if st.session_state.chat_history:
+    st.subheader("📝 Chat History")
+    for chat in reversed(st.session_state.chat_history):
+        st.chat_message("user").write(f"{chat['user']}  \n*{chat['timestamp']}*")
+        st.chat_message("assistant").write(chat["bot"])
 
-# Footer with instructions
+# Footer
 st.markdown("---")
-st.markdown("### 📖 How to use:")
-st.markdown("""
-1. **Upload a document** (PDF or TXT) using the sidebar
-2. **Click 'Add to Knowledge Base'** to process and store it
-3. **Ask questions** about your documents in the chat interface
-4. **View confidence scores** and retrieved context for each answer
-""")
+st.markdown("Made with ❤️ using Streamlit")

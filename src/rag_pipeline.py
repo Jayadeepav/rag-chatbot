@@ -1,42 +1,73 @@
+from transformers import pipeline
 from src.vector_store import get_vector_store
-from src.llm_integration import generate_response
 
-def query_documents(query, top_k=5):  # Increased top_k for better results
-    """Query documents using RAG approach with confidence scoring"""
-    # Get relevant documents from vector store
-    vector_store = get_vector_store()
-    results = vector_store.search(query, top_k=top_k)
-    
-    # Extract contexts and similarities - ensure they are lists
-    contexts = results.get('documents', [[]])[0]
-    similarities = results.get('distances', [[]])[0]
-    
-    # Ensure similarities is always a list
-    if not isinstance(similarities, list):
-        similarities = [similarities] if similarities is not None else []
-    
-    # Calculate average similarity score (confidence)
-    avg_similarity = sum(similarities) / len(similarities) if similarities else 0
-    
-    # Generate response
-    if contexts:
-        combined_context = "\n\n".join(contexts)
-        answer = generate_response(query, combined_context)
-        
-        # Add confidence metadata to answer
-        if avg_similarity < 0.4:  # Low confidence
-            answer = f"{answer}\n\n*Note: I'm not very confident about this answer as the context isn't strongly related.*"
-        elif avg_similarity > 0.7:  # High confidence
-            answer = f"{answer}\n\n*This information appears to be well-supported by the documents.*"
-            
-    else:
-        answer = "No relevant documents found. Please add documents to the knowledge base first."
-        contexts = []
-        similarities = []
-    
+# Helper: safe text extraction
+def _extract_text_from_doc(d):
+    try:
+        text = getattr(d, "page_content", None)
+        if not text:
+            text = d.get("page_content", None) if isinstance(d, dict) else None
+        if not text:
+            text = d.get("text", None) if isinstance(d, dict) else None
+        return text if text else ""
+    except Exception:
+        return str(d) if d else ""
+
+# Retrieve documents from your vector store
+def retrieve_docs(query, top_k=3):
+    vs = get_vector_store()
+    results = vs.similarity_search_with_score(query, k=top_k)
+
+    docs = [doc for doc, score in results]
+    similarities = [float(score) for doc, score in results]
+
+    return docs, similarities
+
+# Main query function
+def query_documents(query, top_k=3):
+    """
+    Retrieve documents, extract context, and answer the query.
+    """
+    # 1) Retrieve from DB
+    docs, similarities = retrieve_docs(query, top_k=top_k)
+
+    # 2) Extract clean text
+    contexts = [_extract_text_from_doc(d) for d in docs]
+
+    # 3) Guard: no contexts
+    if not contexts or all(c.strip() == "" for c in contexts):
+        return {
+            "answer": "No documents found in the knowledge base. Please add documents first.",
+            "contexts": contexts,
+            "similarities": similarities,
+            "confidence": None
+        }
+
+    # 4) QA with HuggingFace pipeline
+    try:
+        qa = pipeline("question-answering", model="deepset/roberta-base-squad2")
+
+        combined_for_qa = " ".join([c for c in contexts if c and len(c.strip()) > 20])
+        if not combined_for_qa.strip():
+            return {
+                "answer": "No valid text retrieved from the documents.",
+                "contexts": contexts,
+                "similarities": similarities,
+                "confidence": None
+            }
+
+        res = qa(question=query, context=combined_for_qa)
+        answer = res.get("answer", "").strip()
+        confidence = float(res.get("score", 0.0))
+
+    except Exception as e:
+        answer = f"Error: QA pipeline failed ({e})."
+        confidence = None
+
+    # ✅ Final return
     return {
         "answer": answer,
         "contexts": contexts,
-        "confidence": avg_similarity,
-        "similarities": similarities  # Ensure this is always a list
+        "similarities": similarities,
+        "confidence": confidence
     }

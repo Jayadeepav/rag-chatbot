@@ -30,6 +30,9 @@ Query the documents using a local Phi-2 model (no API needed)
 
 CPU-friendly setup (runs locally without GPU)
 
+📄 Document Processing & Question Answering System
+
+This project allows users to upload documents, generate embeddings using Hugging Face models, and retrieve answers in real-time using a local language model — all without internet access or external APIs.
 
 Generation Pipeline and Retrival
 
